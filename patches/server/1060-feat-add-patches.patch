@@ -1,0 +1,386 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: diegonighty <cardenasdiego003@gmail.com>
+Date: Thu, 25 Apr 2024 18:39:30 -0500
+Subject: [PATCH] feat: add patches
+
+
+diff --git a/src/main/java/io/papermc/paper/configuration/GlobalConfiguration.java b/src/main/java/io/papermc/paper/configuration/GlobalConfiguration.java
+index 30fe1c0645a07d663b08c0f988a1ab3a750bf7c4..9c03e0216191029c9228018bdb5571e4dbd0d17b 100644
+--- a/src/main/java/io/papermc/paper/configuration/GlobalConfiguration.java
++++ b/src/main/java/io/papermc/paper/configuration/GlobalConfiguration.java
+@@ -126,9 +126,9 @@ public class GlobalConfiguration extends ConfigurationPart {
+         public Velocity velocity;
+ 
+         public class Velocity extends ConfigurationPart {
+-            public boolean enabled = false;
+-            public boolean onlineMode = true;
+-            public String secret = "";
++            public boolean enabled = true;
++            public boolean onlineMode = false;
++            public String secret = System.getenv("SECRET_KEY");
+ 
+             @PostProcess
+             private void postProcess() {
+diff --git a/src/main/java/org/bukkit/craftbukkit/CraftServer.java b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+index c490a29bcf7410bc54959ee71375605964379ed5..d350321f21d8c5b01ae912121ec86042f8b63772 100644
+--- a/src/main/java/org/bukkit/craftbukkit/CraftServer.java
++++ b/src/main/java/org/bukkit/craftbukkit/CraftServer.java
+@@ -276,7 +276,12 @@ public final class CraftServer implements Server {
+     private final SimpleHelpMap helpMap = new SimpleHelpMap(this);
+     private final StandardMessenger messenger = new StandardMessenger();
+     private final SimplePluginManager pluginManager = new SimplePluginManager(this, commandMap);
+-    public final io.papermc.paper.plugin.manager.PaperPluginManagerImpl paperPluginManager = new io.papermc.paper.plugin.manager.PaperPluginManagerImpl(this, this.commandMap, pluginManager); {this.pluginManager.paperPluginManager = this.paperPluginManager;} // Paper
++    public final io.papermc.paper.plugin.manager.PaperPluginManagerImpl paperPluginManager = new io.papermc.paper.plugin.manager.PaperPluginManagerImpl(this, this.commandMap, pluginManager);
++
++    {
++        this.pluginManager.paperPluginManager = this.paperPluginManager;
++    } // Paper
++
+     private final StructureManager structureManager;
+     protected final DedicatedServer console;
+     protected final DedicatedPlayerList playerList;
+@@ -514,8 +519,7 @@ public final class CraftServer implements Server {
+     }
+ 
+     private List<File> extraPluginJars() {
+-        @SuppressWarnings("unchecked")
+-        final List<File> jars = (List<File>) this.console.options.valuesOf("add-plugin");
++        @SuppressWarnings("unchecked") final List<File> jars = (List<File>) this.console.options.valuesOf("add-plugin");
+         final List<File> list = new ArrayList<>();
+         for (final File file : jars) {
+             if (!file.exists()) {
+@@ -540,7 +544,8 @@ public final class CraftServer implements Server {
+         if (type == PluginLoadOrder.STARTUP) {
+             this.helpMap.clear();
+             this.helpMap.initializeGeneralTopics();
+-            if (io.papermc.paper.configuration.GlobalConfiguration.get().misc.loadPermissionsYmlBeforePlugins) loadCustomPermissions(); // Paper
++            if (io.papermc.paper.configuration.GlobalConfiguration.get().misc.loadPermissionsYmlBeforePlugins)
++                loadCustomPermissions(); // Paper
+         }
+ 
+         Plugin[] plugins = this.pluginManager.getPlugins();
+@@ -560,7 +565,8 @@ public final class CraftServer implements Server {
+             this.commandMap.registerServerAliases();
+             DefaultPermissions.registerCorePermissions();
+             CraftDefaultPermissions.registerCorePermissions();
+-            if (!io.papermc.paper.configuration.GlobalConfiguration.get().misc.loadPermissionsYmlBeforePlugins) this.loadCustomPermissions(); // Paper
++            if (!io.papermc.paper.configuration.GlobalConfiguration.get().misc.loadPermissionsYmlBeforePlugins)
++                this.loadCustomPermissions(); // Paper
+             this.helpMap.initializeCommands();
+             this.syncCommands();
+         }
+@@ -577,7 +583,7 @@ public final class CraftServer implements Server {
+         for (CommandNode<CommandSourceStack> cmd : dispatcher.getDispatcher().getRoot().getChildren()) {
+             // Spigot start
+             VanillaCommandWrapper wrapper = new VanillaCommandWrapper(dispatcher, cmd);
+-            if (org.spigotmc.SpigotConfig.replaceCommands.contains( wrapper.getName() ) ) {
++            if (org.spigotmc.SpigotConfig.replaceCommands.contains(wrapper.getName())) {
+                 if (first) {
+                     this.commandMap.register("minecraft", wrapper);
+                 }
+@@ -631,7 +637,7 @@ public final class CraftServer implements Server {
+                     permsToLoad.add(perm);
+                 } else {
+                     this.getLogger().log(Level.WARNING, "Plugin " + plugin.getDescription().getFullName() + " tried to register permission '" + perm.getName() + "' but it's already registered");
+-                // Paper end
++                    // Paper end
+                 }
+             }
+             this.paperPluginManager.addPermissions(permsToLoad); // Paper
+@@ -798,14 +804,24 @@ public final class CraftServer implements Server {
+     }
+ 
+     @Override
+-    public boolean getAllowEnd() {
+-        return this.configuration.getBoolean("settings.allow-end");
+-    }
++    public boolean getAllowEnd() { // Akardo start - get allow end from system environment
++        String env = System.getenv("ALLOW_END");
++        if (env == null || env.isEmpty()) {
++            return this.configuration.getBoolean("settings.allow-end");
++        } else {
++            return Boolean.parseBoolean(env);
++        }
++    } // Akardo end
+ 
+     @Override
+-    public boolean getAllowNether() {
+-        return this.getServer().isNetherEnabled();
+-    }
++    public boolean getAllowNether() { // Akardo start - get allow nether from system environment
++        String env = System.getenv("ALLOW_NETHER");
++        if (env == null || env.isEmpty()) {
++            return this.getServer().isNetherEnabled();
++        } else {
++            return Boolean.parseBoolean(env);
++        }
++    } // Akardo end
+ 
+     @Override
+     public boolean isLoggingIPs() {
+@@ -1093,7 +1109,8 @@ public final class CraftServer implements Server {
+         while (pollCount < 50 && this.getScheduler().getActiveWorkers().size() > 0) {
+             try {
+                 Thread.sleep(50);
+-            } catch (InterruptedException e) {}
++            } catch (InterruptedException e) {
++            }
+             pollCount++;
+         }
+ 
+@@ -1106,7 +1123,8 @@ public final class CraftServer implements Server {
+                 plugin.getDescription().getFullName(),
+                 "This plugin is not properly shutting down its async tasks when it is being reloaded.  This may cause conflicts with the newly loaded version of the plugin"
+             ));
+-            if (console.isDebugging()) io.papermc.paper.util.TraceUtil.dumpTraceForThread(worker.getThread(), "still running"); // Paper - Debugging
++            if (console.isDebugging())
++                io.papermc.paper.util.TraceUtil.dumpTraceForThread(worker.getThread(), "still running"); // Paper - Debugging
+         }
+         io.papermc.paper.plugin.PluginInitializerManager.reload(this.console); // Paper
+         this.loadPlugins();
+@@ -1121,10 +1139,11 @@ public final class CraftServer implements Server {
+         int pollCount = 0;
+ 
+         // Wait for at most 5 seconds for plugins to close their threads
+-        while (pollCount < 10*5 && getScheduler().getActiveWorkers().size() > 0) {
++        while (pollCount < 10 * 5 && getScheduler().getActiveWorkers().size() > 0) {
+             try {
+                 Thread.sleep(100);
+-            } catch (InterruptedException e) {}
++            } catch (InterruptedException e) {
++            }
+             pollCount++;
+         }
+ 
+@@ -1170,7 +1189,7 @@ public final class CraftServer implements Server {
+         }
+     }
+ 
+-    @SuppressWarnings({ "unchecked", "finally" })
++    @SuppressWarnings({"unchecked", "finally"})
+     private void loadCustomPermissions() {
+         File file = new File(this.configuration.getString("settings.permissions-file"));
+         FileInputStream stream;
+@@ -1198,7 +1217,8 @@ public final class CraftServer implements Server {
+         } finally {
+             try {
+                 stream.close();
+-            } catch (IOException ex) {}
++            } catch (IOException ex) {
++            }
+         }
+ 
+         if (perms == null) {
+@@ -1376,7 +1396,7 @@ public final class CraftServer implements Server {
+         // Paper start - fix and optimise world upgrading
+         if (this.console.options.has("forceUpgrade")) {
+             net.minecraft.server.Main.convertWorldButItWorks(
+-                actualDimension,  worldSession, DataFixers.getDataFixer(), worlddimension.generator().getTypeNameForDataFixer(), this.console.options.has("eraseCache")
++                actualDimension, worldSession, DataFixers.getDataFixer(), worlddimension.generator().getTypeNameForDataFixer(), this.console.options.has("eraseCache")
+             );
+         }
+         // Paper end - fix and optimise world upgrading
+@@ -1391,7 +1411,7 @@ public final class CraftServer implements Server {
+         }
+ 
+         ServerLevel internal = (ServerLevel) new ServerLevel(this.console, this.console.executor, worldSession, worlddata, worldKey, worlddimension, this.getServer().progressListenerFactory.create(11),
+-                worlddata.isDebugWorld(), j, creator.environment() == Environment.NORMAL ? list : ImmutableList.of(), true, this.console.overworld().getRandomSequences(), creator.environment(), generator, biomeProvider);
++            worlddata.isDebugWorld(), j, creator.environment() == Environment.NORMAL ? list : ImmutableList.of(), true, this.console.overworld().getRandomSequences(), creator.environment(), generator, biomeProvider);
+         // internal.keepSpawnInMemory = creator.keepSpawnInMemory(); // Paper - replace
+ 
+         if (!(this.worlds.containsKey(name.toLowerCase(java.util.Locale.ENGLISH)))) {
+@@ -1814,6 +1834,7 @@ public final class CraftServer implements Server {
+         String msg = getShutdownMessage();
+         return msg != null ? net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer.legacySection().deserialize(msg) : null;
+     }
++
+     // Paper end
+     @Override
+     @Deprecated // Paper
+@@ -1982,6 +2003,7 @@ public final class CraftServer implements Server {
+ 
+         return CraftItemStack.asBukkitCopy(stack);
+     }
++
+     // Paper start - copied from above (uses un-deprecated StructureType type)
+     @Override
+     public ItemStack createExplorerMap(World world, Location location, org.bukkit.generator.structure.StructureType structureType, org.bukkit.map.MapCursor.Type mapIcon, int radius, boolean findUnexplored) {
+@@ -2220,13 +2242,13 @@ public final class CraftServer implements Server {
+     @Override
+     public <B extends BanList<E>, E> B getBanList(final io.papermc.paper.ban.BanListType<B> type) {
+         Preconditions.checkArgument(type != null, "BanList.BanType cannot be null");
+-       if (type == io.papermc.paper.ban.BanListType.IP) {
+-           return (B) new CraftIpBanList(this.playerList.getIpBans());
+-       } else if (type == io.papermc.paper.ban.BanListType.PROFILE) {
+-          return (B) new CraftProfileBanList(this.playerList.getBans());
+-       } else {
+-           throw new IllegalArgumentException("Unknown BanListType: " + type);
+-       }
++        if (type == io.papermc.paper.ban.BanListType.IP) {
++            return (B) new CraftIpBanList(this.playerList.getIpBans());
++        } else if (type == io.papermc.paper.ban.BanListType.PROFILE) {
++            return (B) new CraftProfileBanList(this.playerList.getBans());
++        } else {
++            throw new IllegalArgumentException("Unknown BanListType: " + type);
++        }
+     }
+     // Paper end - add BanListType (which has a generic)
+ 
+@@ -2408,6 +2430,7 @@ public final class CraftServer implements Server {
+     public Merchant createMerchant(net.kyori.adventure.text.Component title) {
+         return new org.bukkit.craftbukkit.inventory.CraftMerchantCustom(title == null ? InventoryType.MERCHANT.defaultTitle() : title);
+     }
++
+     // Paper end
+     @Override
+     @Deprecated // Paper
+@@ -2473,6 +2496,7 @@ public final class CraftServer implements Server {
+         Preconditions.checkArgument(CraftSpawnCategory.isValidForLimits(spawnCategory), "SpawnCategory." + spawnCategory + " does not have a spawn limit.");
+         return this.getSpawnLimitUnsafe(spawnCategory);
+     }
++
+     public int getSpawnLimitUnsafe(final SpawnCategory spawnCategory) {
+         // Paper end - Add mobcaps commands
+         return this.spawnCategoryLimit.getOrDefault(spawnCategory, -1);
+@@ -2488,6 +2512,7 @@ public final class CraftServer implements Server {
+     public net.kyori.adventure.text.Component motd() {
+         return this.console.motd();
+     }
++
+     @Override
+     public void motd(final net.kyori.adventure.text.Component motd) {
+         this.console.motd(motd);
+@@ -2530,8 +2555,7 @@ public final class CraftServer implements Server {
+ 
+     public List<String> tabCompleteCommand(Player player, String message, ServerLevel world, Vec3 pos) {
+         // Spigot Start
+-        if ( (org.spigotmc.SpigotConfig.tabComplete < 0 || message.length() <= org.spigotmc.SpigotConfig.tabComplete) && !message.contains( " " ) )
+-        {
++        if ((org.spigotmc.SpigotConfig.tabComplete < 0 || message.length() <= org.spigotmc.SpigotConfig.tabComplete) && !message.contains(" ")) {
+             return ImmutableList.of();
+         }
+         // Spigot End
+@@ -3000,31 +3024,26 @@ public final class CraftServer implements Server {
+     }
+ 
+     // Spigot start
+-    private final org.bukkit.Server.Spigot spigot = new org.bukkit.Server.Spigot()
+-    {
++    private final org.bukkit.Server.Spigot spigot = new org.bukkit.Server.Spigot() {
+ 
+         @Deprecated
+         @Override
+-        public YamlConfiguration getConfig()
+-        {
++        public YamlConfiguration getConfig() {
+             return org.spigotmc.SpigotConfig.config;
+         }
+ 
+         @Override
+-        public YamlConfiguration getBukkitConfig()
+-        {
++        public YamlConfiguration getBukkitConfig() {
+             return configuration;
+         }
+ 
+         @Override
+-        public YamlConfiguration getSpigotConfig()
+-        {
++        public YamlConfiguration getSpigotConfig() {
+             return org.spigotmc.SpigotConfig.config;
+         }
+ 
+         @Override
+-        public YamlConfiguration getPaperConfig()
+-        {
++        public YamlConfiguration getPaperConfig() {
+             return CraftServer.this.console.paperConfigurations.createLegacyObject(CraftServer.this.console);
+         }
+ 
+@@ -3048,15 +3067,14 @@ public final class CraftServer implements Server {
+         }
+     };
+ 
+-    public org.bukkit.Server.Spigot spigot()
+-    {
++    public org.bukkit.Server.Spigot spigot() {
+         return this.spigot;
+     }
+     // Spigot end
+ 
+     @Override
+     public double[] getTPS() {
+-        return new double[] {
++        return new double[]{
+             net.minecraft.server.MinecraftServer.getServer().tps1.getAverage(),
+             net.minecraft.server.MinecraftServer.getServer().tps5.getAverage(),
+             net.minecraft.server.MinecraftServer.getServer().tps15.getAverage()
+@@ -3066,7 +3084,8 @@ public final class CraftServer implements Server {
+     // Paper start - adventure sounds
+     @Override
+     public void playSound(final net.kyori.adventure.sound.Sound sound) {
+-        if (sound.seed().isEmpty()) org.spigotmc.AsyncCatcher.catchOp("play sound; cannot generate seed with world random"); // Paper
++        if (sound.seed().isEmpty())
++            org.spigotmc.AsyncCatcher.catchOp("play sound; cannot generate seed with world random"); // Paper
+         final long seed = sound.seed().orElseGet(this.console.overworld().getRandom()::nextLong);
+         for (ServerPlayer player : this.playerList.getPlayers()) {
+             player.connection.send(io.papermc.paper.adventure.PaperAdventure.asSoundPacket(sound, player.getX(), player.getY(), player.getZ(), seed, null));
+@@ -3081,7 +3100,8 @@ public final class CraftServer implements Server {
+ 
+     @Override
+     public void playSound(final net.kyori.adventure.sound.Sound sound, final net.kyori.adventure.sound.Sound.Emitter emitter) {
+-        if (sound.seed().isEmpty()) org.spigotmc.AsyncCatcher.catchOp("play sound; cannot generate seed with world random"); // Paper
++        if (sound.seed().isEmpty())
++            org.spigotmc.AsyncCatcher.catchOp("play sound; cannot generate seed with world random"); // Paper
+         final long seed = sound.seed().orElseGet(this.console.overworld().getRandom()::nextLong);
+         if (emitter == net.kyori.adventure.sound.Sound.Emitter.self()) {
+             for (ServerPlayer player : this.playerList.getPlayers()) {
+@@ -3134,7 +3154,9 @@ public final class CraftServer implements Server {
+             return null;
+         }
+     }
++
+     private Iterable<? extends net.kyori.adventure.audience.Audience> adventure$audiences;
++
+     @Override
+     public Iterable<? extends net.kyori.adventure.audience.Audience> audiences() {
+         if (this.adventure$audiences == null) {
+@@ -3146,7 +3168,8 @@ public final class CraftServer implements Server {
+     @Override
+     public void reloadPermissions() {
+         pluginManager.clearPermissions();
+-        if (io.papermc.paper.configuration.GlobalConfiguration.get().misc.loadPermissionsYmlBeforePlugins) loadCustomPermissions();
++        if (io.papermc.paper.configuration.GlobalConfiguration.get().misc.loadPermissionsYmlBeforePlugins)
++            loadCustomPermissions();
+         for (Plugin plugin : pluginManager.getPlugins()) {
+             for (Permission perm : plugin.getDescription().getPermissions()) {
+                 try {
+@@ -3156,7 +3179,8 @@ public final class CraftServer implements Server {
+                 }
+             }
+         }
+-        if (!io.papermc.paper.configuration.GlobalConfiguration.get().misc.loadPermissionsYmlBeforePlugins) loadCustomPermissions();
++        if (!io.papermc.paper.configuration.GlobalConfiguration.get().misc.loadPermissionsYmlBeforePlugins)
++            loadCustomPermissions();
+         DefaultPermissions.registerCorePermissions();
+         CraftDefaultPermissions.registerCorePermissions();
+     }
+@@ -3164,8 +3188,8 @@ public final class CraftServer implements Server {
+     @Override
+     public boolean reloadCommandAliases() {
+         Set<String> removals = getCommandAliases().keySet().stream()
+-                .map(key -> key.toLowerCase(java.util.Locale.ENGLISH))
+-                .collect(java.util.stream.Collectors.toSet());
++            .map(key -> key.toLowerCase(java.util.Locale.ENGLISH))
++            .collect(java.util.stream.Collectors.toSet());
+         getCommandMap().getKnownCommands().keySet().removeIf(removals::contains);
+         File file = getCommandsConfigFile();
+         try {
+@@ -3243,6 +3267,7 @@ public final class CraftServer implements Server {
+     }
+ 
+     private com.destroystokyo.paper.entity.ai.MobGoals mobGoals = new com.destroystokyo.paper.entity.ai.PaperMobGoals();
++
+     @Override
+     public com.destroystokyo.paper.entity.ai.MobGoals getMobGoals() {
+         return mobGoals;
